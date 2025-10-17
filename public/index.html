@@ -9,6 +9,9 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
+            <a href="https://help.relativity.com/RelativityOne/Content/index.htm#" class="logo-link">
+                <img src="img/logo.png" alt="Relativity Logo" class="header-logo">
+            </a>
             <h1>Relativity Releases FAQ</h1>
             <p>Ask me about Relativity product releases</p>
         </div>
@@ -22,6 +25,7 @@
         </div>
 
         <div class="contact-form" id="contactForm" style="display: none;">
+            <button class="close-button" onclick="document.getElementById('contactForm').style.display='none'; document.getElementById('isCollectingContact').value='false';">×</button>
             <h3>I need some information to help you better</h3>
             <form id="contactFormElement">
                 <input type="text" id="nameInput" placeholder="Your name" required>
@@ -31,7 +35,7 @@
             </form>
         </div>
 
-        <div class="chat-input">
+        <div class="chat-input" id="chatInputContainer">
             <input type="text" id="messageInput" placeholder="Ask about Relativity releases..." autocomplete="off">
             <button id="sendButton">Send</button>
         </div>
@@ -42,6 +46,23 @@
             <span></span>
         </div>
     </div>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div class="footer-description">
+                <p class="footer-main">Made with ❤️ by David Soto, Grok and Claude - The Dream Team</p>
+                <p class="footer-legal">
+                    This page is not owned by Relativity and was developed as part of a technical assessment presented by Nserio.
+                    It does not intend to replace or modify official communications and exists solely for testing purposes.
+                    It will be removed after the assessment. The AI and database are configured to ensure no data exposure,
+                    and everything will be deleted once the evaluation is complete and results are obtained.
+                </p>
+            </div>
+            <a href="https://help.relativity.com/RelativityOne/Content/index.htm#" class="footer-logo-link">
+                <img src="img/footer-logo-2x_50x50.png" alt="Relativity Footer Logo" class="footer-logo">
+            </a>
+        </div>
+    </footer>
 
     <script src="app.js"></script>
 </body>
