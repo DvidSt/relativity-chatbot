@@ -74,23 +74,35 @@ app.post('/api/chat', async (req, res) => {
         needsContact = false;
         break;
 
+      case IntentType.ESCALATION_REQUEST:
+        // ESCALATION REQUEST FLOW: User wants to talk to person, buy services, etc.
+        console.log('📞 Routing to ESCALATION REQUEST flow');
+        answer = await generateEscalationMessage(
+          message,
+          'User requested human assistance or services beyond release information',
+          intent.language
+        );
+        needsContact = true;
+        confidence = 0;
+        break;
+
       case IntentType.QUESTION:
         // QUESTION FLOW: Research and answer WITH MEMORY
         console.log('🔍 Routing to QUESTION flow');
         const releases = await getReleaseData();
-        
+
         // AHORA conductResearch recibe el sessionId
         const researchResult = await conductResearch(
-          message, 
-          intent.language, 
+          message,
+          intent.language,
           releases,
           sessionId  // ← NUEVO: Pasar sessionId
         );
-        
+
         if (researchResult.needsEscalation) {
           // ESCALATION FLOW: Cannot answer
           console.log('⚠️ Escalating to contact form');
-          const reason = researchResult.releasesUsed === 0 
+          const reason = researchResult.releasesUsed === 0
             ? 'No relevant releases found'
             : 'Insufficient information in available releases';
           answer = await generateEscalationMessage(message, reason, intent.language);
@@ -110,8 +122,8 @@ app.post('/api/chat', async (req, res) => {
         // ESCALATION FLOW: Unknown intent
         console.log('❓ Unknown intent, escalating');
         answer = await generateEscalationMessage(
-          message, 
-          'Unable to determine intent', 
+          message,
+          'Unable to determine intent',
           intent.language
         );
         needsContact = true;
