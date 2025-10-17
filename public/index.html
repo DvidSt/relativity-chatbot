@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relativity Releases FAQ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Relativity Releases FAQ</h1>
+            <p>Ask me about Relativity product releases</p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <div class="message-content">
+                    Hello! I'm here to help you with questions about Relativity releases. What would you like to know?
+                </div>
+            </div>
+        </div>
+
+        <div class="contact-form" id="contactForm" style="display: none;">
+            <h3>I need some information to help you better</h3>
+            <form id="contactFormElement">
+                <input type="text" id="nameInput" placeholder="Your name" required>
+                <input type="email" id="emailInput" placeholder="Your email" required>
+                <input type="text" id="orgInput" placeholder="Your organization" required>
+                <button type="submit">Submit</button>
+            </form>
+        </div>
+
+        <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Ask about Relativity releases..." autocomplete="off">
+            <button id="sendButton">Send</button>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator" style="display: none;">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
