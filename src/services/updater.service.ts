@@ -86,16 +86,35 @@ async function scrapeLatestRelease(): Promise<ReleaseNote | null> {
 
     // Extract the first/latest release from the page
     const latestRelease = await page.evaluate(() => {
-      // This selector might need adjustment based on the actual page structure
-      const rows = document.querySelectorAll('table tr');
-      
-      if (rows.length < 2) return null;
+      // Try different selectors for the release table
+      const possibleSelectors = [
+        'table tr',
+        '.table tr',
+        '#release-notes-table tr',
+        '.release-notes tr',
+        'tbody tr'
+      ];
+
+      let rows: NodeListOf<Element> | null = null;
+
+      for (const selector of possibleSelectors) {
+        rows = document.querySelectorAll(selector);
+        if (rows && rows.length >= 2) break;
+      }
+
+      if (!rows || rows.length < 2) {
+        console.log('No table rows found with any selector');
+        return null;
+      }
 
       // Skip header, get first data row
-      const firstDataRow = rows[1];
+      const firstDataRow = rows[1] as HTMLTableRowElement;
       const cells = firstDataRow.querySelectorAll('td');
-      
-      if (cells.length < 5) return null;
+
+      if (cells.length < 5) {
+        console.log(`Found row but only ${cells.length} cells, expected 5`);
+        return null;
+      }
 
       return {
         date: cells[0]?.textContent?.trim() || '',

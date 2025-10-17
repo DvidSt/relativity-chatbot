@@ -22,5 +22,8 @@
     "node_modules",
     "dist",
     "public"
+  ],
+  "postCompile": [
+    "cp -r src/prompts dist/"
   ]
 }

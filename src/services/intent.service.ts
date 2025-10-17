@@ -14,8 +14,8 @@ export interface IntentResult {
 
 // Patrones simples para detección rápida
 const GREETING_PATTERNS = {
-  es: /^(hola|buenos días|buenas tardes|buenas noches|hey|saludos|qué tal|cómo estás|cómo estas|buena|bueno)/i,
-  en: /^(hello|hi|hey|good morning|good afternoon|good evening|greetings|what's up|whats up|how are you)/i
+  es: /^(hola|buenos días|buenas tardes|buenas noches|hey|saludos|qué tal|cómo estás|cómo estas|buena|bueno|hola!|buenos días!|buenas tardes!|buenas noches!|hola\?|qué tal\?)/i,
+  en: /^(hello|hi|hey|good morning|good afternoon|good evening|greetings|what's up|whats up|how are you|hi!|hello!|hey!|good morning!|good afternoon!|good evening!)/i
 };
 
 const QUESTION_PATTERNS = {

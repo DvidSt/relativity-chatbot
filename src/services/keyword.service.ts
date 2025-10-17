@@ -85,11 +85,23 @@ function simpleKeywordExtraction(message: string): KeywordResult {
     }
   });
 
+  // NUEVO: Extract multi-word phrases (2-4 words)
+  const phrasePattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/g;
+  const phrases = message.match(phrasePattern);
+  if (phrases) {
+    phrases.forEach(phrase => {
+      if (phrase.split(' ').length >= 2) {
+        keywords.push(phrase);
+      }
+    });
+  }
+
   // Extract common keywords
   const commonKeywords = [
-    'air', 'processing', 'legal hold', 'review', 'analytics', 
+    'air', 'processing', 'legal hold', 'review', 'analytics',
     'search', 'imaging', 'production', 'collect', 'arm',
     'new', 'update', 'feature', 'enhancement', 'change',
+    'last', 'latest', 'recent', 'release',
     'nuevo', 'nueva', 'actualización', 'función', 'característica'
   ];
 

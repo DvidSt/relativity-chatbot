@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const QUESTION_PROMPT_PATH = path.join(__dirname, '../prompts/QUESTION_PROMPT.txt');
+const FOLLOWUP_PROMPT_PATH = path.join(__dirname, '../prompts/FOLLOWUP_PROMPT.txt');
 
 // Legacy function - kept for backwards compatibility
 export async function generateChatResponse(
@@ -61,17 +62,25 @@ Your response should be just the answer, or "NEEDS_CONTACT", followed by confide
   };
 }
 
-// New function for research flow
+// New function for research flow with conversation context
 export async function generateAnswer(
   question: string,
   relevantReleases: ReleaseNote[],
-  language: 'es' | 'en' | 'other'
+  language: 'es' | 'en' | 'other',
+  conversationContext?: string
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+    }
+  });
 
   // Load prompt template
   let promptTemplate: string;
@@ -88,9 +97,14 @@ export async function generateAnswer(
   ).join('\n');
 
   // Replace placeholders
-  const fullPrompt = promptTemplate
+  let fullPrompt = promptTemplate
     .replace('{CONTEXT}', contextText)
     .replace('{QUESTION}', question);
+
+  // Add conversation context if available
+  if (conversationContext) {
+    fullPrompt = `PREVIOUS CONVERSATION:\n${conversationContext}\n\n` + fullPrompt;
+  }
 
   try {
     const result = await model.generateContent(fullPrompt);
@@ -98,6 +112,68 @@ export async function generateAnswer(
     return response.text().trim();
   } catch (error) {
     console.error('Answer generation error:', error);
+    throw error;
+  }
+}
+
+// NEW: Function specifically for follow-up questions
+export async function generateFollowUpAnswer(
+  question: string,
+  previousReleases: ReleaseNote[],
+  conversationContext: string,
+  language: 'es' | 'en' | 'other'
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      temperature: 0.8, // Más creatividad para explicaciones
+      topP: 0.9,
+      topK: 40,
+    }
+  });
+
+  // Load follow-up prompt template
+  let promptTemplate: string;
+  try {
+    promptTemplate = await fs.readFile(FOLLOWUP_PROMPT_PATH, 'utf-8');
+  } catch (error) {
+    console.error('Error loading follow-up prompt, using default');
+    promptTemplate = `CONVERSATION HISTORY:
+{CONVERSATION_CONTEXT}
+
+RELEASES DISCUSSED:
+{RELEASES}
+
+USER FOLLOW-UP QUESTION:
+{QUESTION}
+
+The user is asking for clarification or more details about the previous response. Provide a clear, detailed explanation using the same release information, but explain it differently or provide more context.
+
+Respond in ${language === 'es' ? 'Spanish' : 'English'}.`;
+  }
+
+  // Format releases
+  const releasesText = previousReleases.map(r =>
+    `• ${r.date} - ${r.feature} (${r.category}): ${r.description}`
+  ).join('\n');
+
+  // Replace placeholders
+  const fullPrompt = promptTemplate
+    .replace('{CONVERSATION_CONTEXT}', conversationContext)
+    .replace('{RELEASES}', releasesText)
+    .replace('{QUESTION}', question)
+    .replace('{LANGUAGE}', language === 'es' ? 'Spanish' : 'English');
+
+  try {
+    const result = await model.generateContent(fullPrompt);
+    const response = await result.response;
+    return response.text().trim();
+  } catch (error) {
+    console.error('Follow-up answer generation error:', error);
     throw error;
   }
 }

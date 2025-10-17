@@ -57,9 +57,38 @@ export async function smartSearch(
     });
   });
 
-  // 3. Búsqueda por keywords en contenido
+  // 3. NUEVO: Búsqueda de frases multi-palabra (PRIORIDAD)
   keywords.keywords.forEach(keyword => {
-    if (keyword.length < 2) return; // Skip very short keywords
+    if (keyword.includes(' ')) { // Es una frase de múltiples palabras
+      allReleases.forEach(release => {
+        const searchText = `${release.feature} ${release.description} ${release.category}`.toLowerCase();
+        const keywordLower = keyword.toLowerCase();
+
+        if (searchText.includes(keywordLower)) {
+          const key = `${release.version}-${release.feature}`;
+          const existing = matchedReleases.get(key);
+
+          // Mucho más puntos para frases exactas
+          const points = 80;
+
+          if (existing) {
+            existing.score += points;
+            existing.matchedBy.push('exact-phrase');
+          } else {
+            matchedReleases.set(key, {
+              release,
+              score: points,
+              matchedBy: ['exact-phrase']
+            });
+          }
+        }
+      });
+    }
+  });
+
+  // 4. Búsqueda por keywords individuales en contenido
+  keywords.keywords.forEach(keyword => {
+    if (keyword.length < 2 || keyword.includes(' ')) return; // Skip short or phrases
 
     allReleases.forEach(release => {
       const searchText = `${release.feature} ${release.description} ${release.category}`.toLowerCase();
@@ -68,13 +97,15 @@ export async function smartSearch(
       if (searchText.includes(keywordLower)) {
         const key = `${release.version}-${release.feature}`;
         const existing = matchedReleases.get(key);
-        
+
         // More points if it's in the feature name
         const points = release.feature.toLowerCase().includes(keywordLower) ? 40 : 15;
-        
+
         if (existing) {
           existing.score += points;
-          existing.matchedBy.push('keyword');
+          if (!existing.matchedBy.includes('keyword')) {
+            existing.matchedBy.push('keyword');
+          }
         } else {
           matchedReleases.set(key, {
             release,
@@ -86,7 +117,7 @@ export async function smartSearch(
     });
   });
 
-  // 4. Búsqueda por keywords traducidos (si son diferentes)
+  // 5. Búsqueda por keywords traducidos (si son diferentes)
   keywords.translatedKeywords.forEach(keyword => {
     if (keyword.length < 2 || keywords.keywords.includes(keyword)) return;
 
@@ -98,10 +129,12 @@ export async function smartSearch(
         const key = `${release.version}-${release.feature}`;
         const existing = matchedReleases.get(key);
         const points = release.feature.toLowerCase().includes(keywordLower) ? 40 : 15;
-        
+
         if (existing) {
           existing.score += points;
-          existing.matchedBy.push('translated-keyword');
+          if (!existing.matchedBy.includes('translated-keyword')) {
+            existing.matchedBy.push('translated-keyword');
+          }
         } else {
           matchedReleases.set(key, {
             release,
@@ -113,15 +146,22 @@ export async function smartSearch(
     });
   });
 
-  // 5. Ordenar por relevancia y tomar los top 20
+  // 6. Ordenar por relevancia y tomar los top 20
   const sortedResults = Array.from(matchedReleases.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
 
-  // 6. Priorizar releases más recientes si hay empate en score
+  // 7. Priorizar releases más recientes si hay empate en score
   const recentFirst = sortedResults.sort((a, b) => {
     if (a.score === b.score) {
-      return b.release.date.localeCompare(a.release.date);
+      // Parse dates correctly for comparison
+      const [yearA, monthA, dayA] = a.release.date.split('/').map(Number);
+      const [yearB, monthB, dayB] = b.release.date.split('/').map(Number);
+
+      const dateA = new Date(yearA, monthA - 1, dayA);
+      const dateB = new Date(yearB, monthB - 1, dayB);
+
+      return dateB.getTime() - dateA.getTime();
     }
     return b.score - a.score;
   });

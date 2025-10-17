@@ -1,5 +1,5 @@
 const API_BASE = window.location.origin;
-let sessionId = 'session_' + Date.now();
+let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 let isCollectingContact = false;
 let lastQuestion = '';
 
@@ -9,6 +9,24 @@ const sendButton = document.getElementById('sendButton');
 const contactForm = document.getElementById('contactForm');
 const contactFormElement = document.getElementById('contactFormElement');
 const typingIndicator = document.getElementById('typingIndicator');
+
+// Add close button functionality
+const closeButton = document.createElement('button');
+closeButton.innerHTML = '×';
+closeButton.className = 'close-button';
+closeButton.onclick = () => {
+    contactForm.style.display = 'none';
+    isCollectingContact = false;
+};
+contactForm.appendChild(closeButton);
+
+// Add click outside to close
+contactForm.addEventListener('click', (e) => {
+    if (e.target === contactForm) {
+        contactForm.style.display = 'none';
+        isCollectingContact = false;
+    }
+});
 
 // Add welcome message on load
 window.addEventListener('DOMContentLoaded', () => {

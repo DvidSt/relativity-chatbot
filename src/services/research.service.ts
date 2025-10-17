@@ -1,7 +1,12 @@
 import { ReleaseNote } from '../types';
-import { extractKeywords } from './keyword.service';
-import { smartSearch } from './search.service';
-import { generateAnswer } from './gemini.service';
+import { executeQuery } from './query-engine.service';
+import { generateAnswer, generateFollowUpAnswer } from './gemini.service';
+import { 
+  getConversationContext, 
+  getLastReleases, 
+  detectFollowUpQuestion,
+  addToConversation 
+} from './conversation-memory.service';
 
 export interface ResearchResult {
   answer: string;
@@ -13,63 +18,125 @@ export interface ResearchResult {
 export async function conductResearch(
   question: string,
   language: 'es' | 'en' | 'other',
-  allReleases: ReleaseNote[]
+  allReleases: ReleaseNote[],
+  sessionId: string
 ): Promise<ResearchResult> {
-  console.log(`🔍 Conducting research for: "${question}"`);
-
-  // 1. Extract keywords from the question
-  const keywords = await extractKeywords(question, language);
-  console.log(`📝 Keywords extracted:`, keywords.keywords);
-
-  // 2. Smart search for relevant releases
-  const searchResult = await smartSearch(keywords, allReleases);
-  console.log(`📊 Found ${searchResult.releases.length} relevant releases (score: ${searchResult.relevanceScore})`);
-
-  // 3. Check if we have enough relevant information
-  if (searchResult.releases.length === 0) {
-    console.log('⚠️ No relevant releases found, escalating');
-    return {
-      answer: '',
-      confidence: 0,
-      releasesUsed: 0,
-      needsEscalation: true
-    };
-  }
-
-  // 4. If relevance score is too low, escalate
-  if (searchResult.relevanceScore < 30 && searchResult.releases.length < 5) {
-    console.log('⚠️ Low relevance score and few results, escalating');
-    return {
-      answer: '',
-      confidence: 0,
-      releasesUsed: 0,
-      needsEscalation: true
-    };
-  }
-
-  // 5. Generate answer using the relevant releases
-  try {
-    const answer = await generateAnswer(question, searchResult.releases, language);
+  console.log(`🔍 Conducting intelligent research for: "${question}"`);
+  
+  // 1. Detectar si es una pregunta de seguimiento (follow-up)
+  const followUp = detectFollowUpQuestion(question, sessionId);
+  
+  if (followUp.isFollowUp) {
+    console.log(`🔄 Follow-up detected about: "${followUp.topic}"`);
     
-    // Check if the AI indicated it needs more info
-    if (answer.toLowerCase().includes('more detailed information') || 
-        answer.toLowerCase().includes('información más detallada')) {
-      console.log('🤖 AI indicated needs escalation');
+    const previousReleases = getLastReleases(sessionId);
+    
+    if (previousReleases.length > 0) {
+      try {
+        const conversationContext = getConversationContext(sessionId);
+        const answer = await generateFollowUpAnswer(
+          question,
+          previousReleases,
+          conversationContext,
+          language
+        );
+        
+        console.log(`✅ Follow-up answer generated`);
+        
+        // Guardar en memoria
+        addToConversation(
+          sessionId,
+          question,
+          answer,
+          previousReleases,
+          'follow-up',
+          language
+        );
+        
+        return {
+          answer,
+          confidence: 90,
+          releasesUsed: previousReleases.length,
+          needsEscalation: false
+        };
+      } catch (error) {
+        console.error('❌ Error generating follow-up:', error);
+        // Continuar con búsqueda normal
+      }
+    }
+  }
+  
+  // 2. USAR EL NUEVO MOTOR DE CONSULTAS
+  const queryResult = executeQuery(question, allReleases);
+  
+  console.log(`🎯 Query Type: ${queryResult.queryType}`);
+  console.log(`📊 Found ${queryResult.releases.length} releases (confidence: ${queryResult.confidence}%)`);
+  console.log(`💡 ${queryResult.explanation}`);
+  
+  // 3. Validar resultados
+  if (queryResult.releases.length === 0) {
+    console.log('⚠️ No releases found, escalating');
+    return {
+      answer: '',
+      confidence: 0,
+      releasesUsed: 0,
+      needsEscalation: true
+    };
+  }
+  
+  // 4. Si la confianza es muy baja, escalar
+  if (queryResult.confidence < 40) {
+    console.log('⚠️ Low confidence query, escalating');
+    return {
+      answer: '',
+      confidence: queryResult.confidence,
+      releasesUsed: queryResult.releases.length,
+      needsEscalation: true
+    };
+  }
+  
+  // 5. Generar respuesta con IA
+  try {
+    const conversationContext = getConversationContext(sessionId);
+    const answer = await generateAnswer(
+      question, 
+      queryResult.releases, 
+      language,
+      conversationContext
+    );
+    
+    // Detectar si la IA no pudo responder
+    if (answer.toLowerCase().includes('more detailed information') ||
+        answer.toLowerCase().includes('información más detallada') ||
+        answer.toLowerCase().includes('nuestro equipo de soporte')) {
+      console.log('🤖 AI indicated insufficient information, escalating');
       return {
         answer,
-        confidence: 50,
-        releasesUsed: searchResult.releases.length,
+        confidence: 40,
+        releasesUsed: queryResult.releases.length,
         needsEscalation: true
       };
     }
-
-    console.log(`✅ Research complete with ${searchResult.releases.length} releases`);
+    
+    console.log(`✅ Research complete with ${queryResult.releases.length} releases`);
+    
+    // Guardar en memoria de conversación
+    addToConversation(
+      sessionId,
+      question,
+      answer,
+      queryResult.releases,
+      queryResult.queryType,
+      language
+    );
+    
     return {
       answer,
-      confidence: Math.min(95, searchResult.relevanceScore),
-      releasesUsed: searchResult.releases.length,
+      confidence: queryResult.confidence,
+      releasesUsed: queryResult.releases.length,
       needsEscalation: false
     };
+    
   } catch (error) {
     console.error('❌ Error generating answer:', error);
     return {

@@ -1,38 +1,61 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { getReleaseData } from './services/data.service';
-import { validateContactInfo, submitContactInfo } from './services/contact.service';
+import crypto from 'crypto';
+import { getReleaseData, debugReleases } from './services/data.service';
+import { submitContactInfo } from './services/contact.service';
 import { detectIntent, IntentType } from './services/intent.service';
 import { handleGreeting } from './services/conversation.service';
 import { conductResearch } from './services/research.service';
 import { generateEscalationMessage } from './services/escalation.service';
 import { startAutoUpdater } from './services/updater.service';
+import { getActiveSessions } from './services/conversation-memory.service';
 import { ContactInfo } from './types';
 
 dotenv.config();
 
+// Debug releases on startup
+debugReleases().catch(console.error);
+
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Store chat sessions
-const chatSessions = new Map<string, { context: any[]; lastActivity: Date }>();
+// Helper function to get or create sessionId
+function getSessionId(req: express.Request): string {
+  // Try to get sessionId from body first
+  if (req.body.sessionId) {
+    return req.body.sessionId;
+  }
+  
+  // Generate sessionId based on IP + User-Agent
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const userAgent = req.headers['user-agent'] || 'unknown';
+  
+  return crypto
+    .createHash('sha256')
+    .update(`${ip}-${userAgent}`)
+    .digest('hex')
+    .substring(0, 16);
+}
 
-// Chat endpoint - NEW INTELLIGENT VERSION
+// Chat endpoint - INTELLIGENT VERSION WITH MEMORY
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, sessionId } = req.body;
+    const { message } = req.body;
 
-    if (!message) return res.status(400).json({ error: 'Message required' });
+    if (!message) {
+      return res.status(400).json({ error: 'Message required' });
+    }
 
-    console.log(`\n📨 New message: "${message}"`);
+    // Get or generate sessionId
+    const sessionId = getSessionId(req);
 
-    // Get or create session
-    let session = chatSessions.get(sessionId) || { context: [], lastActivity: new Date() };
+    console.log(`\n📨 New message: "${message}" (Session: ${sessionId.substring(0, 8)}...)`);
+    console.log(`👥 Active sessions: ${getActiveSessions()}`);
 
     // STEP 1: Detect Intent
     const intent = await detectIntent(message);
@@ -52,10 +75,17 @@ app.post('/api/chat', async (req, res) => {
         break;
 
       case IntentType.QUESTION:
-        // QUESTION FLOW: Research and answer
+        // QUESTION FLOW: Research and answer WITH MEMORY
         console.log('🔍 Routing to QUESTION flow');
         const releases = await getReleaseData();
-        const researchResult = await conductResearch(message, intent.language, releases);
+        
+        // AHORA conductResearch recibe el sessionId
+        const researchResult = await conductResearch(
+          message, 
+          intent.language, 
+          releases,
+          sessionId  // ← NUEVO: Pasar sessionId
+        );
         
         if (researchResult.needsEscalation) {
           // ESCALATION FLOW: Cannot answer
@@ -89,28 +119,22 @@ app.post('/api/chat', async (req, res) => {
         break;
     }
 
-    // Update session
-    session.context.push({ 
-      question: message, 
-      answer, 
-      intent: intent.type,
-      timestamp: new Date() 
-    });
-    session.lastActivity = new Date();
-    chatSessions.set(sessionId, session);
-
     console.log(`📤 Sending response (needsContact: ${needsContact})\n`);
 
     res.json({
       answer,
       needsContact,
       confidence,
-      intent: intent.type // For debugging
+      sessionId, // Devolver sessionId al frontend
+      intent: intent.type
     });
 
   } catch (error) {
     console.error('❌ Chat error:', error);
-    res.status(500).json({ error: 'Failed to process chat message' });
+    res.status(500).json({ 
+      error: 'Failed to process chat message',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -139,30 +163,36 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     service: 'Relativity Chatbot API',
-    version: '2.0',
-    features: ['intent-detection', 'smart-search', 'ai-escalation']
+    version: '3.0',
+    features: [
+      'intent-detection', 
+      'smart-search', 
+      'ai-escalation',
+      'conversation-memory',  // NUEVO
+      'follow-up-detection'   // NUEVO
+    ],
+    activeSessions: getActiveSessions()
   });
 });
 
-// Clean up old sessions every hour
-setInterval(() => {
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  for (const [sessionId, session] of chatSessions.entries()) {
-    if (session.lastActivity < oneHourAgo) {
-      chatSessions.delete(sessionId);
-      console.log(`🧹 Cleaned up session: ${sessionId}`);
-    }
-  }
-}, 60 * 60 * 1000);
+// NUEVO: Debug endpoint para ver sesiones activas
+app.get('/api/debug/sessions', (req, res) => {
+  res.json({
+    activeSessions: getActiveSessions(),
+    timestamp: new Date().toISOString()
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════╗
-║   🚀 Relativity Chatbot API v2.0                  ║
+║   🚀 Relativity Chatbot API v3.0                  ║
 ║   Port: ${PORT}                                    ║
 ║   ✅ Intent Detection System Active               ║
 ║   ✅ Smart Search Engine Ready                    ║
 ║   ✅ AI-Powered Responses Enabled                 ║
+║   ✅ Conversation Memory Active                   ║
+║   ✅ Follow-Up Detection Enabled                  ║
 ║   ✅ Auto-Updater Initialized                     ║
 ╚════════════════════════════════════════════════════╝
   `);

@@ -21,6 +21,10 @@ RULES:
 - Respond in the SAME language as the user's question
 - Do NOT apologize excessively
 - Focus on the solution (connecting them with an expert)
+- Provide a single, natural response (not multiple options)
+- Make it conversational and helpful
+
+Example responses:
 
 Example responses:
 

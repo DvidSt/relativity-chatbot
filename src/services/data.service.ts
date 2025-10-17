@@ -64,12 +64,35 @@ async function loadFromCSV(): Promise<ReleaseNote[]> {
 
 function parseCSVLine(line: string): string[] | null {
   try {
-    // Match quoted fields: "field1","field2","field3"
-    const matches = line.match(/"([^"]*)"/g);
-    if (!matches) return null;
-    
-    // Remove quotes from each match
-    return matches.map(m => m.slice(1, -1));
+    const fields: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (char === '"' && !inQuotes) {
+        inQuotes = true;
+      } else if (char === '"' && inQuotes && nextChar === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else if (char === '"' && inQuotes) {
+        inQuotes = false;
+      } else if (char === ',' && !inQuotes) {
+        fields.push(current.trim());
+        current = '';
+      } else if (inQuotes) {
+        current += char;
+      }
+    }
+
+    // Add last field
+    if (current || inQuotes) {
+      fields.push(current.trim());
+    }
+
+    return fields.length >= 5 ? fields : null;
   } catch (error) {
     console.error('Error parsing CSV line:', error);
     return null;
@@ -109,8 +132,19 @@ export async function getLatestRelease(): Promise<ReleaseNote | null> {
 
   if (releases.length === 0) return null;
 
-  // Return the first one (already sorted by date in CSV)
-  return releases[0];
+  // Sort releases by date in descending order (most recent first)
+  const sortedReleases = releases.sort((a, b) => {
+    // Parse dates correctly: "2025/10/16" format
+    const [yearA, monthA, dayA] = a.date.split('/').map(Number);
+    const [yearB, monthB, dayB] = b.date.split('/').map(Number);
+
+    const dateA = new Date(yearA, monthA - 1, dayA);
+    const dateB = new Date(yearB, monthB - 1, dayB);
+
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  return sortedReleases[0];
 }
 
 export async function getReleasesByYear(year: string): Promise<ReleaseNote[]> {
@@ -134,4 +168,30 @@ export async function clearCache(): Promise<void> {
   } catch (error) {
     // Cache might not exist
   }
+}
+
+export async function debugReleases(): Promise<void> {
+  const releases = await getReleaseData();
+
+  console.log('\n===== DEBUG: PRIMEROS 5 RELEASES =====');
+  releases.slice(0, 5).forEach((r, i) => {
+    console.log(`${i + 1}. ${r.date} | ${r.feature} | ${r.description.substring(0, 60)}...`);
+  });
+
+  console.log('\n===== DEBUG: ÚLTIMO RELEASE =====');
+  const latest = await getLatestRelease();
+  if (latest) {
+    console.log(`Fecha: ${latest.date}`);
+    console.log(`Feature: ${latest.feature}`);
+    console.log(`Descripción: ${latest.description}`);
+  }
+
+  console.log('\n===== DEBUG: BÚSQUEDA "Cost Explorer" =====');
+  const costExplorer = releases.filter(r =>
+    r.description.toLowerCase().includes('cost explorer')
+  );
+  console.log(`Encontrados: ${costExplorer.length}`);
+  costExplorer.forEach(r => {
+    console.log(`- ${r.date}: ${r.description}`);
+  });
 }
